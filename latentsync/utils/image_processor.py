@@ -40,6 +40,22 @@ class ImageProcessor:
         self.normalize = transforms.Normalize([0.5], [0.5], inplace=True)
 
         self.restorer = AlignRestore(resolution=resolution, device=device)
+        self.previous_landmarks = np.array([
+                [388, 639], [205, 317], [241, 542], [254, 564], [270, 583], [288, 601], [309, 616], [332, 629],
+                [358, 637], [203, 343], [204, 368], [206, 393], [209, 418], [213, 443], [218, 469], [223, 494],
+                [231, 519], [558, 311], [528, 535], [516, 557], [501, 577], [484, 595], [464, 612], [442, 626],
+                [417, 635], [560, 336], [560, 362], [559, 387], [556, 412], [553, 437], [549, 462], [544, 487],
+                [537, 511], [302, 350], [304, 334], [270, 338], [284, 346], [322, 347], [304, 334], [339, 341],
+                [304, 321], [284, 326], [324, 327], [237, 302], [262, 292], [289, 287], [347, 298], [319, 290],
+                [257, 275], [288, 265], [350, 282], [322, 269], [322, 521], [387, 553], [353, 525], [338, 537],
+                [359, 549], [420, 523], [436, 534], [415, 547], [386, 527], [452, 517], [386, 514], [369, 495],
+                [343, 505], [332, 521], [354, 515], [401, 494], [429, 502], [442, 517], [419, 513], [385, 498],
+                [381, 330], [382, 363], [382, 395], [356, 343], [346, 412], [334, 441], [349, 451], [365, 455],
+                [383, 460], [407, 342], [420, 411], [432, 440], [418, 451], [402, 455], [382, 428], [461, 347],
+                [460, 332], [425, 341], [442, 345], [480, 343], [460, 332], [494, 335], [459, 319], [439, 325],
+                [479, 323], [414, 298], [442, 290], [471, 288], [498, 292], [525, 300], [412, 283], [439, 271],
+                [472, 267], [504, 276]
+            ])
 
         if mask_image is None:
             self.mask_image = load_fixed_mask(resolution)
@@ -56,7 +72,13 @@ class ImageProcessor:
             raise NotImplementedError("Using the CPU for face detection is not supported")
         bbox, landmark_2d_106 = self.face_detector(image)
         if bbox is None:
-            raise RuntimeError("Face not detected")
+            landmark_2d_106 = self.previous_landmarks
+            bbox = False
+            print("Face not detected, using previous landmarks")
+        else:
+            self.previous_landmarks = landmark_2d_106
+            bbox = True
+            print("Face detected")
 
         pt_left_eye = np.mean(landmark_2d_106[[43, 48, 49, 51, 50]], axis=0)  # left eyebrow center
         pt_right_eye = np.mean(landmark_2d_106[101:106], axis=0)  # right eyebrow center
@@ -68,7 +90,7 @@ class ImageProcessor:
         box = [0, 0, face.shape[1], face.shape[0]]  # x1, y1, x2, y2
         face = cv2.resize(face, (self.resolution, self.resolution), interpolation=cv2.INTER_LANCZOS4)
         face = rearrange(torch.from_numpy(face), "h w c -> c h w")
-        return face, box, affine_matrix
+        return bbox, face, box, affine_matrix
 
     def preprocess_fixed_mask_image(self, image: torch.Tensor, affine_transform=False):
         if affine_transform:
